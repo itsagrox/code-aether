@@ -1,0 +1,100 @@
+import React, { useState } from "react";
+import { Layout, Select, Typography, Splitter, FloatButton, Spin } from "antd";
+import { RightSquareOutlined, SyncOutlined } from "@ant-design/icons"
+import MonacoEditor from "@monaco-editor/react";
+import { refactorCode } from "../services/api"
+import CodeRefactorRequest from "../interfaces/CodeRefactorRequest";
+import CodeRefactorResponse from "../interfaces/CodeRefactorResponse";
+
+const { Header, Content } = Layout;
+const { Title } = Typography;
+
+const CodeAetherUI: React.FC = () => {
+  const [loading, setLoading] = useState(false)
+  const [model, setModel] = useState("generic");
+  const [language, setLanguage] = useState("javascript");
+  const [code, setCode] = useState("// Paste your code here...");
+  const [refactoredCode, setRefactoredCode] = useState("// Refactored code appears here...");
+
+  const requestData: CodeRefactorRequest = {
+    originalCode: code,
+    language: language,
+    modelType: model,
+  };
+
+  const handleRefactor = async () => {
+    setLoading(true)
+    try {
+      const response = await refactorCode(requestData);
+      setRefactoredCode(response.refactoredCode)
+      setLoading(false)
+    } catch (error) {
+      console.log(error)
+      setLoading(false)
+
+    }
+  }
+
+  return (
+    <Layout style={{ height: "100vh" }}>
+      {/* Navbar */}
+      <Header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#001529", padding: "0 20px" }}>
+        <Title level={3} style={{ color: "white", margin: 0 }}>CodeAether <RightSquareOutlined /> </Title>
+
+        <div style={{ display: "flex", gap: "15px" }}>
+          <Select value={model} onChange={setModel} style={{ width: 150 }}>
+            <Select.Option value="generic">Generic Model</Select.Option>
+            <Select.Option value="fine-tuned">Fine-Tuned Model</Select.Option>
+          </Select>
+
+          <Select value={language} onChange={setLanguage} style={{ width: 150 }}>
+            <Select.Option value="javascript">JavaScript</Select.Option>
+            <Select.Option value="python">Python</Select.Option>
+            <Select.Option value="java">Java</Select.Option>
+          </Select>
+        </div>
+      </Header>
+
+      {/* Splitter Layout */}
+      <Content style={{ padding: "20px", background: "#f0f2f5" }}>
+        <Splitter >
+          {/* Left Panel - Code Input */}
+          <Splitter.Panel defaultSize={60} style={{ position: "relative" }}>
+            <MonacoEditor
+              height="calc(100vh - 64px)"
+              language={language}
+              theme="vs-dark"
+              value={code}
+              onChange={(value: any) => setCode(value || "")}
+            />
+            <FloatButton
+              shape="square"
+              type="primary"
+              description={loading ? "Aethering..." : "Aether"}
+              icon={loading ? <Spin indicator={<SyncOutlined style={{ fontSize: 20, color: "white" }} spin />} /> : <RightSquareOutlined />}
+              style={{
+                position: "absolute",
+                bottom: "20px",
+                right: "20px",
+                width: "100px",
+                height: "50px"
+              }}
+              onClick={handleRefactor}
+            />
+          </Splitter.Panel>
+          <Splitter.Panel defaultSize={40}>
+            <MonacoEditor
+              height="calc(100vh - 64px)"
+              language={language}
+              theme="vs-dark"
+              value={refactoredCode}
+              options={{ readOnly: true }}
+            />
+          </Splitter.Panel>
+        </Splitter>
+      </Content>
+    </Layout>
+  );
+};
+
+export default CodeAetherUI;
