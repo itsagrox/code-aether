@@ -3,60 +3,73 @@ from dotenv import load_dotenv
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
 
-# Load environment variables from .env file
+# Load environment variables
 load_dotenv()
-
-# Get the Hugging Face API key (for optional authentication if needed)
 huggingface_api_key = os.getenv("HUGGINGFACE_API_KEY")
 
-# Load the model and tokenizer locally
-def load_model():
-    model_name = "meta-llama/Llama-2-7b-chat-hf"
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+# Choose a smaller model
+model_name = "meta-llama/Llama-3.2-3B-Instruct"
 
-    tokenizer = AutoTokenizer.from_pretrained(model_name, use_auth_token=huggingface_api_key)
-    model = AutoModelForCausalLM.from_pretrained(
-        model_name,
-        torch_dtype=torch.float16 if device == "cuda" else torch.float32,
-        device_map="auto",
-        use_auth_token=huggingface_api_key
-    )
+# Force the use of CPU
+device = "cpu"
 
-    return model, tokenizer, device
+# Load tokenizer
+tokenizer = AutoTokenizer.from_pretrained(model_name, token=huggingface_api_key)
 
-# Initialize the model and tokenizer
-model, tokenizer, device = load_model()
+# Load model (no quantization)
+model = AutoModelForCausalLM.from_pretrained(
+    model_name,
+    torch_dtype=torch.float32,  # Use float32 for CPU
+    device_map="cpu",
+    token=huggingface_api_key
+)
 
-# Function to refactor code using the loaded model
-def refactor_code_locally(code: str, language: str,model_type:str):
-    prompt = f"""
-        You are an AI that strictly outputs refactored code following best practices. 
-        Do not add any explanations, messages, or comments. 
+# Function to refactor code
+def refactor_code_locally(code: str, language: str, model_type: str):
+    prompt = f"""### Task:
+Refactor the following {language} code to follow best practices.
+Strictly return only the refactored code. **Do NOT add any explanations, comments, or additional functionality.**
+Maintain the original functionality and structure as much as possible.
 
-        Refactor the following {language} code to follow best practices. 
-        Only return the refactored code inside triple backticks:
+### Input Code:
+{code}
 
-        ```{language}
-        {code}"""
-    inputs = tokenizer(prompt, return_tensors="pt").to(device)
+### Refactored {language} Code:
+"""
 
+    # Convert input text into tokenized form
+    inputs = tokenizer(prompt, return_tensors="pt",return_attention_mask=True).to(device)
+
+    # Generate output while ignoring input tokens
     with torch.no_grad():
         outputs = model.generate(
-            **inputs,
-            max_length=300,
-            temperature=0.7,  # Controls randomness (lower is more deterministic)
-            top_p=0.9,        # Controls diversity (higher is more diverse)
+            input_ids=inputs["input_ids"],
+            max_new_tokens=500,  # Limit output length
+            temperature=0.1,
+            top_p=0.7,
             do_sample=True,
+            repetition_penalty=1.2,
             eos_token_id=tokenizer.eos_token_id
         )
 
-    return tokenizer.decode(outputs[0], skip_special_tokens=True)
+    # Extract only new tokens (ignore input tokens)
+    generated_tokens = outputs[0][inputs["input_ids"].shape[1]:]  # Remove input tokens from output
 
-# Function to wrap the refactor process with retry logic (if needed)
-def call_huggingface_api(code: str, language: str, model_type: str, retries=10, delay=10):
-    # Directly use the local model to get refactored code
+    # Decode response (keep raw)
+    raw_response = tokenizer.decode(generated_tokens, skip_special_tokens=True)
+
+    print("\n===== DEBUG: RAW OUTPUT =====\n", raw_response)  # Debugging output
+
+    # Extract only the refactored code part (if needed)
+    if "### Refactored" in raw_response:
+        raw_response = raw_response.split("### Refactored")[1].strip()
+
+    return raw_response
+
+
+# Function to call the refactoring process
+def call_huggingface_api(code: str, language: str, model_type: str):
     try:
-        refactored_code = refactor_code_locally(code, language, model_type)
-        return refactored_code
+        return refactor_code_locally(code, language, model_type)
     except Exception as e:
-        return f"Error during refactoring: {str(e)}"
+        return f"Error: {str(e)}"
