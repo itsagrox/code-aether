@@ -8,7 +8,7 @@ load_dotenv()
 huggingface_api_key = os.getenv("HUGGINGFACE_API_KEY")
 
 # Choose a smaller model
-model_name = "meta-llama/Llama-3.2-3B-Instruct"
+model_name = "meta-llama/Llama-3.2-1B-Instruct"
 
 # Force the use of CPU
 device = "cpu"
